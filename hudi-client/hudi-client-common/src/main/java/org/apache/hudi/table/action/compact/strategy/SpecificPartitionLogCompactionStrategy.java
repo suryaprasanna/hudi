@@ -16,18 +16,14 @@
  * limitations under the License.
  */
 
-package org.apache.hudi.table.action.compact;
+package org.apache.hudi.table.action.compact.strategy;
 
-public enum CompactionTriggerStrategy {
-    // trigger compaction when reach N delta commits
-    NUM_COMMITS,
-    // trigger compaction when time elapsed > N seconds since last compaction
-    TIME_ELAPSED,
-    // trigger compaction when both NUM_COMMITS and TIME_ELAPSED are satisfied
-    NUM_AND_TIME,
-    // trigger compaction when NUM_COMMITS or TIME_ELAPSED is satisfied
-    NUM_OR_TIME,
-    // Always triggers. This is way to port the condition check from ScheduleCompactionActionExecutor
-    // towards the plan generators. Ideally done when there are complex condition checks.
-    ALWAYS_ALLOW
+import org.apache.hudi.config.HoodieWriteConfig;
+
+public class SpecificPartitionLogCompactionStrategy extends SpecificPartitionCompactionStrategy {
+
+  @Override
+  protected String getPartitionsConfig(HoodieWriteConfig writeConfig) {
+    return writeConfig.getPartitionsForLogCompaction();
+  }
 }

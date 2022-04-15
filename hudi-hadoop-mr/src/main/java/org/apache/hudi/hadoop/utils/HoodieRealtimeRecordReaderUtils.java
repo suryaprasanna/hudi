@@ -46,8 +46,6 @@ import org.apache.hudi.exception.HoodieIOException;
 import org.apache.hudi.hadoop.config.HoodieRealtimeConfig;
 import org.apache.hudi.io.storage.HoodieFileReader;
 import org.apache.hudi.io.storage.HoodieFileReaderFactory;
-import org.apache.log4j.LogManager;
-import org.apache.log4j.Logger;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -56,6 +54,7 @@ import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
@@ -64,7 +63,6 @@ import static org.apache.hudi.avro.AvroSchemaUtils.appendFieldsToSchema;
 import static org.apache.hudi.avro.AvroSchemaUtils.createNullableSchema;
 
 public class HoodieRealtimeRecordReaderUtils {
-  private static final Logger LOG = LogManager.getLogger(HoodieRealtimeRecordReaderUtils.class);
 
   /**
    * Reads the schema from the base file.
@@ -96,9 +94,10 @@ public class HoodieRealtimeRecordReaderUtils {
     if (writable == null) {
       return "null";
     }
+    Random random = new Random(2);
     StringBuilder builder = new StringBuilder();
     Writable[] values = writable.get();
-    builder.append("\"values_" + Math.random() + "_" + values.length + "\": {");
+    builder.append("\"values_" + random.nextDouble() + "_" + values.length + "\": {");
     int i = 0;
     for (Writable w : values) {
       if (w instanceof ArrayWritable) {
