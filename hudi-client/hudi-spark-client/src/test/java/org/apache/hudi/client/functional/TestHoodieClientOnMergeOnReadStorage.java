@@ -36,6 +36,8 @@ import org.apache.hudi.common.testutils.HoodieTestDataGenerator;
 import org.apache.hudi.common.testutils.HoodieTestTable;
 import org.apache.hudi.common.util.Option;
 import org.apache.hudi.common.util.collection.Pair;
+import org.apache.hudi.config.HoodieArchivalConfig;
+import org.apache.hudi.config.HoodieCleanConfig;
 import org.apache.hudi.config.HoodieCompactionConfig;
 import org.apache.hudi.config.HoodieWriteConfig;
 import org.apache.hudi.index.HoodieIndex;
@@ -373,11 +375,13 @@ public class TestHoodieClientOnMergeOnReadStorage extends HoodieClientTestBase {
   public void testCleanFunctionalityWhenCompactionRequestedInstantIsPresent() throws Exception {
     HoodieCompactionConfig compactionConfig = HoodieCompactionConfig.newBuilder()
         .withInlineCompactionTriggerStrategy(CompactionTriggerStrategy.ALWAYS_ALLOW)
-        .retainCommits(4)
         .build();
 
     HoodieWriteConfig config = getConfigBuilder(HoodieTestDataGenerator.TRIP_EXAMPLE_SCHEMA,
-        HoodieIndex.IndexType.INMEMORY).withAutoCommit(true).withCompactionConfig(compactionConfig).build();
+        HoodieIndex.IndexType.INMEMORY).withAutoCommit(true)
+        .withCompactionConfig(compactionConfig)
+        .withCleanConfig(HoodieCleanConfig.newBuilder().retainCommits(4).build())
+        .build();
     SparkRDDWriteClient client = getHoodieWriteClient(config);
 
     // First insert. Here First file slice gets added to file group.
@@ -438,10 +442,11 @@ public class TestHoodieClientOnMergeOnReadStorage extends HoodieClientTestBase {
     HoodieCompactionConfig compactionConfig = HoodieCompactionConfig.newBuilder()
         .withInlineCompactionTriggerStrategy(CompactionTriggerStrategy.ALWAYS_ALLOW)
         .withCompactionStrategy(new SpecificPartitionCompactionStrategy())
-        .retainCommits(4)
         .build();
     HoodieWriteConfig config = getConfigBuilder(HoodieTestDataGenerator.TRIP_EXAMPLE_SCHEMA,
-        HoodieIndex.IndexType.INMEMORY).withAutoCommit(true).withCompactionConfig(compactionConfig).build();
+        HoodieIndex.IndexType.INMEMORY).withAutoCommit(true)
+        .withCleanConfig(HoodieCleanConfig.newBuilder().retainCommits(4).build())
+        .withCompactionConfig(compactionConfig).build();
     SparkRDDWriteClient client = new SparkRDDWriteClient(context, config);
 
     // First insert. Here First file slice gets added to file group.
@@ -608,11 +613,11 @@ public class TestHoodieClientOnMergeOnReadStorage extends HoodieClientTestBase {
     metadataProps.put("hoodie.metadata.compact.max.delta.commits", "1");
     HoodieCompactionConfig compactionConfig = HoodieCompactionConfig.newBuilder()
         .withInlineCompactionTriggerStrategy(CompactionTriggerStrategy.ALWAYS_ALLOW)
-        .retainCommits(2)
-        .archiveCommitsWith(3, 4)
         .build();
     HoodieWriteConfig config = getConfigBuilder(HoodieTestDataGenerator.TRIP_EXAMPLE_SCHEMA, HoodieIndex.IndexType.INMEMORY)
         .withAutoCommit(true).withCompactionConfig(compactionConfig)
+        .withCleanConfig(HoodieCleanConfig.newBuilder().retainCommits(2).build())
+        .withArchivalConfig(HoodieArchivalConfig.newBuilder().archiveCommitsWith(3, 4).build().newBuilder().build())
         .withProperties(metadataProps).build();
     SparkRDDWriteClient client = new SparkRDDWriteClient(context, config);
 
