@@ -83,7 +83,7 @@ public class HoodieLogCompactionPlanGenerator<T extends HoodieRecordPayload, I, 
     List<String> partitionPaths = FSUtils.getAllPartitionPaths(this.engineContext, writeConfig.getMetadataConfig(),
         metaClient.getBasePath());
 
-    // Compaction Strategy should be SpecificPartitionCompactionStrategy to run a logcompaction on a specified partition.
+    // Compaction strategy to be used.
     partitionPaths = writeConfig.getCompactionStrategy().filterPartitionPaths(writeConfig, partitionPaths);
 
     // Collect all pending compaction file groups
@@ -106,7 +106,7 @@ public class HoodieLogCompactionPlanGenerator<T extends HoodieRecordPayload, I, 
         .filterCompletedInstants().lastInstant().get().getTimestamp();
 
     // Here two different filters are applied before scheduling log compaction.
-    // 1. Exclude all the file groups which are either part of a pending compaction or clustering plans.
+    // 1. Exclude all the file groups which are either part of a pending compaction, logcompaction or clustering plans.
     // 2. Check if FileSlices are meeting the criteria for LogCompaction.
     List<HoodieCompactionOperation> operations = engineContext.flatMap(partitionPaths, partitionPath -> fileSystemView
         .getLatestFileSlices(partitionPath)

@@ -182,7 +182,7 @@ public class HoodieSparkMergeOnReadTable<T extends HoodieRecordPayload> extends 
   }
 
   @Override
-  public Iterator<List<WriteStatus>> handlePreppedInserts(String instantTime, String partitionPath, String fileId,
+  public Iterator<List<WriteStatus>> handleInsertsForLogCompaction(String instantTime, String partitionPath, String fileId,
                                                           Map<String, HoodieRecord<? extends HoodieRecordPayload>> recordMap,
                                                           Map<HoodieLogBlock.HeaderMetadataType, String> header) {
     HoodieAppendHandle appendHandle = new HoodieAppendHandle(config, instantTime, this,

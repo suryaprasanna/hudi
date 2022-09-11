@@ -46,8 +46,6 @@ import org.apache.hudi.table.HoodieSparkTable;
 import org.apache.hudi.table.HoodieTable;
 import org.apache.hudi.table.action.HoodieWriteMetadata;
 import org.apache.hudi.table.action.compact.CompactionTriggerStrategy;
-import org.apache.hudi.table.action.compact.strategy.SpecificPartitionCompactionStrategy;
-import org.apache.hudi.table.action.compact.strategy.SpecificPartitionLogCompactionStrategy;
 import org.apache.hudi.testutils.GenericRecordValidationTestUtils;
 import org.apache.hudi.testutils.HoodieClientTestBase;
 import org.apache.hudi.testutils.HoodieSparkWriteableTestTable;
@@ -315,18 +313,12 @@ public class TestHoodieClientOnMergeOnReadStorage extends HoodieClientTestBase {
   @Test
   public void testRunningCompactionAndLogCompactionInparallelForDifferentFileGroups() throws Exception {
     HoodieCompactionConfig compactionConfig = HoodieCompactionConfig.newBuilder()
-        .withInlineCompactionTriggerStrategy(CompactionTriggerStrategy.ALWAYS_ALLOW)
-        .withPartitionsForCompaction(HoodieTestDataGenerator.DEFAULT_SECOND_PARTITION_PATH)
-        .withCompactionStrategy(new SpecificPartitionCompactionStrategy())
         .build();
     HoodieWriteConfig config = getConfigBuilder(HoodieTestDataGenerator.TRIP_EXAMPLE_SCHEMA,
         HoodieIndex.IndexType.INMEMORY).withAutoCommit(true).withCompactionConfig(compactionConfig).build();
     SparkRDDWriteClient client = new SparkRDDWriteClient(context, config);
 
     HoodieCompactionConfig logCompactionConfig = HoodieCompactionConfig.newBuilder()
-        .withInlineCompactionTriggerStrategy(CompactionTriggerStrategy.ALWAYS_ALLOW)
-        .withPartitionsForLogCompaction(HoodieTestDataGenerator.DEFAULT_FIRST_PARTITION_PATH)
-        .withCompactionStrategy(new SpecificPartitionLogCompactionStrategy())
         .withLogCompactionBlocksThreshold("1")
         .build();
     HoodieWriteConfig lcConfig = getConfigBuilder(HoodieTestDataGenerator.TRIP_EXAMPLE_SCHEMA,
@@ -432,16 +424,12 @@ public class TestHoodieClientOnMergeOnReadStorage extends HoodieClientTestBase {
     HoodieCompactionConfig logCompactionConfig = HoodieCompactionConfig.newBuilder()
         .withInlineCompactionTriggerStrategy(CompactionTriggerStrategy.ALWAYS_ALLOW)
         .withLogCompactionBlocksThreshold("0")
-        .withCompactionStrategy(new SpecificPartitionLogCompactionStrategy())
-        .withPartitionsForLogCompaction(HoodieTestDataGenerator.DEFAULT_FIRST_PARTITION_PATH)
         .build();
     HoodieWriteConfig lcWriteConfig = getConfigBuilder(HoodieTestDataGenerator.TRIP_EXAMPLE_SCHEMA,
         HoodieIndex.IndexType.INMEMORY).withAutoCommit(true).withCompactionConfig(logCompactionConfig).build();
     SparkRDDWriteClient lcWriteClient = new SparkRDDWriteClient(context, lcWriteConfig);
 
     HoodieCompactionConfig compactionConfig = HoodieCompactionConfig.newBuilder()
-        .withInlineCompactionTriggerStrategy(CompactionTriggerStrategy.ALWAYS_ALLOW)
-        .withCompactionStrategy(new SpecificPartitionCompactionStrategy())
         .build();
     HoodieWriteConfig config = getConfigBuilder(HoodieTestDataGenerator.TRIP_EXAMPLE_SCHEMA,
         HoodieIndex.IndexType.INMEMORY).withAutoCommit(true)

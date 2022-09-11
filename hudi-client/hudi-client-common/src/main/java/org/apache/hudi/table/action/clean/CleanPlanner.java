@@ -245,8 +245,9 @@ public class CleanPlanner<T extends HoodieRecordPayload, I, K, O> implements Ser
       int keepVersions = config.getCleanerFileVersionsRetained();
       // do not cleanup slice required for pending compaction
       Iterator<FileSlice> fileSliceIterator =
-          fileGroup.getAllFileSlices().filter(fs -> !isFileSliceNeededForPendingCompaction(fs)
-              && !isFileSliceNeededForPendingLogCompaction(fs)).iterator();
+          fileGroup.getAllFileSlices()
+              .filter(fs -> !isFileSliceNeededForPendingMajorOrMinorCompaction(fs))
+              .iterator();
       if (isFileGroupInPendingCompaction(fileGroup) || isFileGroupInPendingLogCompaction(fileGroup)) {
         // We have already saved the last version of file-groups for pending compaction Id
         keepVersions--;
@@ -355,7 +356,7 @@ public class CleanPlanner<T extends HoodieRecordPayload, I, K, O> implements Ser
           }
 
           // Always keep the last commit
-          if (!isFileSliceNeededForPendingCompaction(aSlice) && !isFileSliceNeededForPendingLogCompaction(aSlice)
+          if (!isFileSliceNeededForPendingMajorOrMinorCompaction(aSlice)
               && HoodieTimeline.compareTimestamps(earliestCommitToRetain.getTimestamp(), HoodieTimeline.GREATER_THAN, fileCommitTime)) {
             // this is a commit, that should be cleaned.
             aFile.ifPresent(hoodieDataFile -> {
@@ -479,6 +480,15 @@ public class CleanPlanner<T extends HoodieRecordPayload, I, K, O> implements Ser
               HoodieTimeline.GREATER_THAN_OR_EQUALS, earliestTimeToRetain)).findFirst());
     }
     return earliestCommitToRetain;
+  }
+
+  /**
+   * Determine if file slice needed to be preserved for pending compaction or log compaction.
+   * @param fileSlice File slice
+   * @return true if file slice needs to be preserved, false otherwise.
+   */
+  private boolean isFileSliceNeededForPendingMajorOrMinorCompaction(FileSlice fileSlice) {
+    return isFileSliceNeededForPendingCompaction(fileSlice) || isFileSliceNeededForPendingLogCompaction(fileSlice);
   }
 
   /**

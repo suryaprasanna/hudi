@@ -35,8 +35,6 @@ import org.apache.hudi.common.table.HoodieTableMetaClient;
 import org.apache.hudi.common.table.TableSchemaResolver;
 import org.apache.hudi.common.table.log.HoodieMergedLogRecordScanner;
 import org.apache.hudi.common.table.log.block.HoodieLogBlock;
-import org.apache.hudi.common.table.timeline.HoodieTimeline;
-import org.apache.hudi.common.util.CollectionUtils;
 import org.apache.hudi.common.util.StringUtils;
 import org.apache.hudi.config.HoodieWriteConfig;
 import org.apache.hudi.io.IOUtils;
@@ -57,6 +55,9 @@ import java.util.stream.StreamSupport;
 
 import static java.util.stream.Collectors.toList;
 
+/**
+ * Strategy class to execute log compaction operations.
+ */
 public class LogCompactionExecutionStrategy<T extends HoodieRecordPayload, I, K, O> implements Serializable {
 
   private static final Logger LOG = LogManager.getLogger(LogCompactionExecutionStrategy.class);
@@ -119,10 +120,6 @@ public class LogCompactionExecutionStrategy<T extends HoodieRecordPayload, I, K,
         new Schema.Parser().parse(config.getSchema()), config.allowOperationMetadataField());
     LOG.info("Log Compacting delta files " + operation.getDeltaFileNames() + " for commit " + instantTime);
 
-    String maxInstantTime = metaClient
-        .getActiveTimeline().getTimelineOfActions(CollectionUtils.createSet(HoodieTimeline.COMMIT_ACTION,
-            HoodieTimeline.ROLLBACK_ACTION, HoodieTimeline.DELTA_COMMIT_ACTION))
-        .filterCompletedInstants().lastInstant().get().getTimestamp();
     long maxMemoryPerCompaction = IOUtils.getMaxMemoryPerCompaction(taskContextSupplier, config);
     LOG.info("MaxMemoryPerCompaction => " + maxMemoryPerCompaction);
 
@@ -134,7 +131,7 @@ public class LogCompactionExecutionStrategy<T extends HoodieRecordPayload, I, K,
         .withBasePath(metaClient.getBasePath())
         .withLogFilePaths(logFiles)
         .withReaderSchema(readerSchema)
-        .withLatestInstantTime(maxInstantTime)
+        .withLatestInstantTime(instantTime)
         .withMaxMemorySizeInBytes(maxMemoryPerCompaction)
         .withBufferSize(config.getMaxDFSStreamBufferSize())
         .withSpillableMapBasePath(config.getSpillableMapBasePath())
@@ -155,7 +152,7 @@ public class LogCompactionExecutionStrategy<T extends HoodieRecordPayload, I, K,
     header.put(HoodieLogBlock.HeaderMetadataType.COMPACTED_BLOCK_TIMES,
         StringUtils.join(scanner.getValidBlockInstants(), ","));
     // Compacting is very similar to applying updates to existing file
-    Iterator<List<WriteStatus>> result = compactionHandler.handlePreppedInserts(instantTime, operation.getPartitionPath(),
+    Iterator<List<WriteStatus>> result = compactionHandler.handleInsertsForLogCompaction(instantTime, operation.getPartitionPath(),
         operation.getFileId(), scanner.getRecords(), header);
     scanner.close();
     Iterable<List<WriteStatus>> resultIterable = () -> result;

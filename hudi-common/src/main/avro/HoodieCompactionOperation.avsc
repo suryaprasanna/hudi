@@ -94,7 +94,7 @@
     },
     {
        "name":"preserveHoodieMetadata",
-       "type":["boolean", "null"],
+       "type":["null", "boolean"],
        "default": false
     }
   ]
