@@ -220,14 +220,13 @@ public class TestHoodieClientOnMergeOnReadStorage extends HoodieClientTestBase {
         false, false, 50, 100, 2, config.populateMetaFields());
     prevCommitTime = newCommitTime;
 
-    // Delete 5 records
+    // Delete 3 records
     newCommitTime = HoodieActiveTimeline.createNewInstantTime();
     deleteBatch(config, client, newCommitTime, prevCommitTime,
         "000", 3, SparkRDDWriteClient::delete, false, false,
         0, 150);
-    prevCommitTime = newCommitTime;
 
-    String lastCommitBeforeLogCompaction = prevCommitTime;
+    String lastCommitBeforeLogCompaction = newCommitTime;
     // Schedule and execute compaction.
     Option<String> timeStamp = client.scheduleLogCompaction(Option.empty());
     assertTrue(timeStamp.isPresent());
