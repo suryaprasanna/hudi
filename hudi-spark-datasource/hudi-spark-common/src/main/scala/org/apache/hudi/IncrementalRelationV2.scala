@@ -32,14 +32,13 @@ import org.apache.hudi.hadoop.fs.HadoopFSUtils
 import org.apache.hudi.internal.schema.InternalSchema
 import org.apache.hudi.internal.schema.utils.SerDeHelper
 import org.apache.hudi.storage.{HoodieStorageUtils, StoragePath}
-
 import org.apache.avro.Schema
 import org.apache.hadoop.fs.GlobPattern
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SQLContext}
 import org.apache.spark.sql.execution.datasources.parquet.LegacyHoodieParquetFileFormat
 import org.apache.spark.sql.functions.col
-import org.apache.spark.sql.sources.{BaseRelation, TableScan}
+import org.apache.spark.sql.sources.{BaseRelation, PrunedScan, TableScan}
 import org.apache.spark.sql.types.StructType
 import org.slf4j.LoggerFactory
 
@@ -57,7 +56,7 @@ class IncrementalRelationV2(val sqlContext: SQLContext,
                             val optParams: Map[String, String],
                             val userSchema: Option[StructType],
                             val metaClient: HoodieTableMetaClient,
-                            val rangeType: RangeType) extends BaseRelation with TableScan {
+                            val rangeType: RangeType) extends BaseRelation with PrunedScan {
 
   private val log = LoggerFactory.getLogger(classOf[IncrementalRelationV2])
 
@@ -131,7 +130,7 @@ class IncrementalRelationV2(val sqlContext: SQLContext,
 
   override def schema: StructType = usedSchema
 
-  override def buildScan(): RDD[Row] = {
+  override def buildScan(requiredColumns: Array[String]): RDD[Row] = {
     if (usedSchema == StructType(Nil)) {
       // if first commit in a table is an empty commit without schema, return empty RDD here
       sqlContext.sparkContext.emptyRDD[Row]
