@@ -35,7 +35,7 @@ import org.apache.hudi.table.HoodieSparkTable
 import org.apache.spark.api.java.JavaSparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.execution.datasources.parquet.HoodieParquetFileFormat
-import org.apache.spark.sql.sources.{BaseRelation, TableScan}
+import org.apache.spark.sql.sources.{BaseRelation, PrunedScan}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SQLContext}
 import org.slf4j.LoggerFactory
@@ -53,7 +53,7 @@ import scala.collection.mutable
 class IncrementalRelation(val sqlContext: SQLContext,
                           val optParams: Map[String, String],
                           val userSchema: Option[StructType],
-                          val metaClient: HoodieTableMetaClient) extends BaseRelation with TableScan {
+                          val metaClient: HoodieTableMetaClient) extends BaseRelation with PrunedScan {
 
   private val log = LoggerFactory.getLogger(classOf[IncrementalRelation])
 
@@ -137,11 +137,48 @@ class IncrementalRelation(val sqlContext: SQLContext,
 
   override def schema: StructType = usedSchema
 
-  override def buildScan(): RDD[Row] = {
+  def getPrunedSchema(requiredColumns: Array[String]) = {
+    var prunedSchema = StructType(Seq())
+
+    // _hoodie_commit_time is a required field. using which query filters are applied.
+    if (!requiredColumns.contains(HoodieRecord.COMMIT_TIME_METADATA_FIELD)) {
+      prunedSchema = prunedSchema.add(usedSchema(HoodieRecord.COMMIT_TIME_METADATA_FIELD))
+    }
+
+    // Add all the required columns as part of pruned schema
+    requiredColumns.foreach(col => {
+      val field = usedSchema.find(_.name == col)
+      if (field.isDefined) {
+        prunedSchema = prunedSchema.add(field.get)
+      }
+    })
+
+    // All the partition fields are required columns while querying the data.
+    val tableConfig = metaClient.getTableConfig
+    val partitionColumns = tableConfig.getPartitionFields
+    if (partitionColumns.isPresent) {
+      partitionColumns.get().foreach(col => {
+        if (!requiredColumns.contains(col)) {
+          val field = usedSchema.find(_.name == col)
+          if (field.isDefined) {
+            prunedSchema = prunedSchema.add(field.get)
+          }
+        }
+      })
+    }
+    prunedSchema
+  }
+
+  override def buildScan(requiredColumns: Array[String]): RDD[Row] = {
     if (usedSchema == StructType(Nil)) {
       // if first commit in a table is an empty commit without schema, return empty RDD here
       sqlContext.sparkContext.emptyRDD[Row]
     } else {
+      log.info(s"buildScan requiredColumns = ${requiredColumns.mkString(",")}")
+      sqlContext.sparkSession.sessionState.conf.setConfString("spark.sql.parquet.filterPushdown", "true")
+      sqlContext.sparkSession.sessionState.conf.setConfString("spark.sql.parquet.recordLevelFilter.enabled", "true")
+      sqlContext.sparkSession.sessionState.conf.setConfString("spark.sql.parquet.enableVectorizedReader", "false")
+
       val regularFileIdToFullPath = mutable.HashMap[String, String]()
       var metaBootstrapFileIdToFullPath = mutable.HashMap[String, String]()
 
@@ -158,6 +195,7 @@ class IncrementalRelation(val sqlContext: SQLContext,
         }
       }.toMap
 
+      log.info(s"buildScan commitsToReturn = ${commitsToReturn.map(_.getTimestamp).mkString("[", ",", "]")}")
       for (commit <- commitsToReturn) {
         val metadata: HoodieCommitMetadata = HoodieCommitMetadata.fromBytes(commitTimeline.getInstantDetails(commit)
           .get, classOf[HoodieCommitMetadata])
@@ -216,19 +254,22 @@ class IncrementalRelation(val sqlContext: SQLContext,
       val endInstantTime = optParams.getOrElse(DataSourceReadOptions.END_INSTANTTIME.key(), lastInstant.getTimestamp)
       val endInstantArchived = commitTimeline.isBeforeTimelineStarts(endInstantTime)
 
-      val scanDf = if (fallbackToFullTableScan && (startInstantArchived || endInstantArchived)) {
+      // Fetch the pruned schema.
+      val prunedSchema = getPrunedSchema(requiredColumns)
+
+      var scanDf = if (fallbackToFullTableScan && (startInstantArchived || endInstantArchived)) {
         if (useStateTransitionTime) {
           throw new HoodieException("Cannot use stateTransitionTime while enables full table scan")
         }
         log.info(s"Falling back to full table scan as startInstantArchived: $startInstantArchived, endInstantArchived: $endInstantArchived")
-        fullTableScanDataFrame(startInstantTime, endInstantTime)
+        fullTableScanDataFrame(startInstantTime, endInstantTime, prunedSchema)
       } else {
         if (filteredRegularFullPaths.isEmpty && filteredMetaBootstrapFullPaths.isEmpty) {
-          sqlContext.createDataFrame(sqlContext.sparkContext.emptyRDD[Row], usedSchema)
+          sqlContext.createDataFrame(sqlContext.sparkContext.emptyRDD[Row], prunedSchema)
         } else {
           log.info("Additional Filters to be applied to incremental source are :" + filters.mkString("Array(", ", ", ")"))
 
-          var df: DataFrame = sqlContext.createDataFrame(sqlContext.sparkContext.emptyRDD[Row], usedSchema)
+          var df: DataFrame = sqlContext.createDataFrame(sqlContext.sparkContext.emptyRDD[Row], prunedSchema)
 
           var doFullTableScan = false
 
@@ -248,12 +289,12 @@ class IncrementalRelation(val sqlContext: SQLContext,
           }
 
           if (doFullTableScan) {
-            fullTableScanDataFrame(startInstantTime, endInstantTime)
+            fullTableScanDataFrame(startInstantTime, endInstantTime, prunedSchema)
           } else {
             if (metaBootstrapFileIdToFullPath.nonEmpty) {
               df = sqlContext.sparkSession.read
                 .format("hudi_v1")
-                .schema(usedSchema)
+                .schema(prunedSchema)
                 .option(DataSourceReadOptions.READ_PATHS.key, filteredMetaBootstrapFullPaths.mkString(","))
                 // Setting time to the END_INSTANT_TIME, to avoid pathFilter filter out files incorrectly.
                 .option(DataSourceReadOptions.TIME_TRAVEL_AS_OF_INSTANT.key(), endInstantTime)
@@ -263,7 +304,7 @@ class IncrementalRelation(val sqlContext: SQLContext,
             if (regularFileIdToFullPath.nonEmpty) {
               try {
                 df = df.union(sqlContext.read.options(sOpts)
-                  .schema(usedSchema).format(formatClassName)
+                  .schema(prunedSchema).format(formatClassName)
                   // Setting time to the END_INSTANT_TIME, to avoid pathFilter filter out files incorrectly.
                   .option(DataSourceReadOptions.TIME_TRAVEL_AS_OF_INSTANT.key(), endInstantTime)
                   .load(filteredRegularFullPaths.toList: _*)
@@ -279,21 +320,40 @@ class IncrementalRelation(val sqlContext: SQLContext,
                     throw e
                   }
               }
-
             }
             df
           }
         }
       }
-
+      scanDf = filterRequiredColumnsFromDF(scanDf, requiredColumns)
       filters.foldLeft(scanDf)((e, f) => e.filter(f)).rdd
     }
   }
 
-  private def fullTableScanDataFrame(startInstantTime: String, endInstantTime: String): DataFrame = {
+  private def filterRequiredColumnsFromDF(df: DataFrame, requiredColumns: Array[String]) = {
+    var updatedDF = df
+    // If _hoodie_commit_time is not part of the required columns remove it from the resultant Dataframe
+    if (!requiredColumns.contains(HoodieRecord.COMMIT_TIME_METADATA_FIELD)) {
+      updatedDF = updatedDF.toDF().drop(HoodieRecord.COMMIT_TIME_METADATA_FIELD)
+    }
+
+    // Also remove partition fields if they are not part of the required columns
+    val tableConfig = metaClient.getTableConfig
+    val partitionColumns = tableConfig.getPartitionFields
+    if (partitionColumns.isPresent) {
+      partitionColumns.get().foreach(col => {
+        if (!requiredColumns.contains(col)) {
+          updatedDF = updatedDF.toDF().drop(col)
+        }
+      })
+    }
+    updatedDF
+  }
+
+  private def fullTableScanDataFrame(startInstantTime: String, endInstantTime: String, prunedSchema: StructType): DataFrame = {
     val hudiDF = sqlContext.read
       .format("hudi_v1")
-      .schema(usedSchema)
+      .schema(prunedSchema)
       .load(basePath.toString)
       .filter(String.format("%s > '%s'", HoodieRecord.COMMIT_TIME_METADATA_FIELD, //Notice the > in place of >= because we are working with optParam instead of first commit > optParam
         startInstantTime))
@@ -301,7 +361,7 @@ class IncrementalRelation(val sqlContext: SQLContext,
         endInstantTime))
 
     // schema enforcement does not happen in above spark.read with hudi. hence selecting explicitly w/ right column order
-    val fieldNames = usedSchema.fieldNames
+    val fieldNames = prunedSchema.fieldNames
     hudiDF.select(fieldNames.head, fieldNames.tail: _*)
   }
 }
