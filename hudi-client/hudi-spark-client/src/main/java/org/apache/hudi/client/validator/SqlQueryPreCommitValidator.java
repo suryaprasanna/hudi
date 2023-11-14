@@ -83,6 +83,7 @@ public abstract class SqlQueryPreCommitValidator<T, I, K, O extends HoodieData<W
       dataset = dataset.cache();
       LOG.debug("Printing all rows from query validation:");
       dataset.show(Integer.MAX_VALUE,false);
+      dataset.unpersist();
     }
   }
   
