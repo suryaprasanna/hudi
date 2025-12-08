@@ -151,6 +151,7 @@ class IncrementalRelationV2(val sqlContext: SQLContext,
           }
         }
       }.toMap
+      log.info(s"buildScan commitsToReturn = ${commitsToReturn.map(_.requestedTime()).mkString("[", ",", "]")}")
 
       for (commit <- commitsToReturn) {
         val metadata: HoodieCommitMetadata = commitTimeline.readCommitMetadata(commit)
