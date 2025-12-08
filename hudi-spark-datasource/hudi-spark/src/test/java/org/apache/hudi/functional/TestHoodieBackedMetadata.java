@@ -3335,6 +3335,7 @@ public class TestHoodieBackedMetadata extends TestHoodieMetadataBase {
             .ignoreSpuriousDeletes(false)
             .withEnableGlobalRecordLevelIndex(true)
             .build())
+        .withStorageConfig(HoodieStorageConfig.newBuilder().hfileWriterToAllowDuplicates(allowDuplicates).build())
         .build();
 
     try (SparkRDDWriteClient client = new SparkRDDWriteClient(engineContext, customConfig)) {
