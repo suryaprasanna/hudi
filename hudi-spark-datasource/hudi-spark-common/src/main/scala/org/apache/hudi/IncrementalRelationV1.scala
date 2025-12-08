@@ -153,14 +153,6 @@ class IncrementalRelationV1(val sqlContext: SQLContext,
       // if first commit in a table is an empty commit without schema, return empty RDD here
       sqlContext.sparkContext.emptyRDD[Row]
     } else {
-      log.info(s"buildScan requiredColumns = ${requiredColumns.mkString(",")}")
-      sqlContext.sparkSession.sessionState.conf.setConfString("spark.sql.parquet.filterPushdown", "true")
-      sqlContext.sparkSession.sessionState.conf.setConfString("spark.sql.parquet.recordLevelFilter.enabled", "true")
-      // vectorized Parquet reader is decoding the decimal type column to a binary format.
-      // So, it is advised to disable the config, if you have decimal type columns in the source data.
-      // Ref: https://kb.databricks.com/en_US/scala/spark-job-fail-parquet-column-convert
-      sqlContext.sparkSession.sessionState.conf.setConfString("spark.sql.parquet.enableVectorizedReader", "false")
-
       val regularFileIdToFullPath = mutable.HashMap[String, String]()
       var metaBootstrapFileIdToFullPath = mutable.HashMap[String, String]()
 
