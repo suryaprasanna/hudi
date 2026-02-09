@@ -44,3 +44,4 @@ class TestDataSourceOptions {
       DataSourceWriteOptions.DROP_PARTITION_COLUMNS.defaultValue())
   }
 }
+
