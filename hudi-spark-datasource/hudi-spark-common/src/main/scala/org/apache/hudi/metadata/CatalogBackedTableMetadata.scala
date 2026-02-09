@@ -43,21 +43,45 @@ class CatalogBackedTableMetadata(engineContext: HoodieEngineContext,
 
   lazy val sparkSession = engineContext.asInstanceOf[HoodieSparkEngineContext].getSqlContext.sparkSession
 
+  override def getAllPartitionPaths():
+  util.List[String] = {
+    val catalogTablePartitionSeq =
+      sparkSession.sessionState.catalog.externalCatalog
+        .listPartitions(getDatabaseName, getTableName)
+    catalogTablePartitionSeq
+      .map(catalogTablePartition => {
+        val partitionPathURI = new StoragePath(catalogTablePartition.location)
+        FSUtils.getRelativePartitionPath(dataBasePath, partitionPathURI)
+      }).asJava
+  }
+
+  override def getPartitionPathWithPathPrefixes(relativePathPrefixes: util.List[String]):
+  util.List[String] = {
+    val catalogTablePartitionSeq =
+      sparkSession.sessionState.catalog.externalCatalog
+        .listPartitions(getDatabaseName, getTableName)
+    filterPartitionsBasedOnRelativePathPrefixs(relativePathPrefixes, catalogTablePartitionSeq)
+  }
+
   override def getPartitionPathWithPathPrefixUsingFilterExpression(relativePathPrefix: util.List[String],
                                                                    partitionFields: Types.RecordType,
                                                                    pushedExpr: org.apache.hudi.expression.Expression,
                                                                    partitionPredicateExpressions: util.List[Object]):
   util.List[String] = {
-    val partitionPredicateExpressionSeq: Seq[Expression] = partitionPredicateExpressions.asScala.map(_.asInstanceOf[Expression])
-    val catalogTablePartitionSeq: Seq[CatalogTablePartition] =
+    val partitionPredicateExpressionSeq = partitionPredicateExpressions.asScala.map(_.asInstanceOf[Expression])
+    val catalogTablePartitionSeq =
       sparkSession.sessionState.catalog.externalCatalog
         .listPartitionsByFilter(getDatabaseName, getTableName, partitionPredicateExpressionSeq,
-          SQLConf.get.sessionLocalTimeZone
-      )
+          SQLConf.get.sessionLocalTimeZone)
+    filterPartitionsBasedOnRelativePathPrefixs(relativePathPrefix, catalogTablePartitionSeq)
+  }
+
+  private def filterPartitionsBasedOnRelativePathPrefixs(relativePathPrefix: util.List[String],
+                                                         catalogTablePartitionSeq: Seq[CatalogTablePartition]) = {
     // Convert CatalogTablePartition object to String object containing relativePartitionPath.
     // and use relativePathPrefixesPredicate to filter the partition paths further
     val relativePathPrefixPredicate = PartitionPathFilterUtil.relativePathPrefixPredicate(relativePathPrefix)
-    val relativePartitionPathsList: util.List[String] = catalogTablePartitionSeq
+    val relativePartitionPathsList = catalogTablePartitionSeq
       .map(catalogTablePartition => {
         val partitionPathURI = new StoragePath(catalogTablePartition.location)
         FSUtils.getRelativePartitionPath(dataBasePath, partitionPathURI)
