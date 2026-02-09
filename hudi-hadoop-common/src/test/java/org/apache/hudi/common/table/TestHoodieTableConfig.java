@@ -795,4 +795,77 @@ class TestHoodieTableConfig extends HoodieCommonTestHarness {
     });
     assertEquals("Unsupported flow for table versions less than 9", ioException.getMessage().toString());
   }
+
+  @Test
+  void testInferPartitionValueExtractorClass() throws IOException {
+    // Test 1: No partition fields - should return NonPartitionedExtractor
+    Properties props0 = new Properties();
+    TypedProperties typedProps0 = new TypedProperties(props0);
+    String extractorClass0 = HoodieTableConfig.PARTITION_VALUE_EXTRACTOR_CLASS.getInferFunction().apply(typedProps0).orElse("");
+    assertEquals("org.apache.hudi.hive.NonPartitionedExtractor", extractorClass0,
+        "Should infer NonPartitionedExtractor when no partition fields specified");
+
+    // Test 2: Empty partition fields - should return NonPartitionedExtractor
+    Properties props1 = new Properties();
+    props1.setProperty(HoodieTableConfig.PARTITION_FIELDS.key(), "");
+    TypedProperties typedProps1 = new TypedProperties(props1);
+    String extractorClass1 = HoodieTableConfig.PARTITION_VALUE_EXTRACTOR_CLASS.getInferFunction().apply(typedProps1).orElse("");
+    assertEquals("org.apache.hudi.hive.NonPartitionedExtractor", extractorClass1,
+        "Should infer NonPartitionedExtractor for empty partition fields");
+
+    // Test 3: Single partition field without hive style - should return SinglePartPartitionValueExtractor
+    Properties props2 = new Properties();
+    props2.setProperty(HoodieTableConfig.PARTITION_FIELDS.key(), "partition_col");
+    TypedProperties typedProps2 = new TypedProperties(props2);
+    String extractorClass2 = HoodieTableConfig.PARTITION_VALUE_EXTRACTOR_CLASS.getInferFunction().apply(typedProps2).orElse("");
+    assertEquals("org.apache.hudi.hive.SinglePartPartitionValueExtractor", extractorClass2,
+        "Should infer SinglePartPartitionValueExtractor for single partition field");
+
+    // Test 4: Single partition field with hive style enabled - should return HiveStylePartitionValueExtractor
+    Properties props3 = new Properties();
+    props3.setProperty(HoodieTableConfig.PARTITION_FIELDS.key(), "partition_col");
+    props3.setProperty(HoodieTableConfig.HIVE_STYLE_PARTITIONING_ENABLE.key(), "true");
+    TypedProperties typedProps3 = new TypedProperties(props3);
+    String extractorClass3 = HoodieTableConfig.PARTITION_VALUE_EXTRACTOR_CLASS.getInferFunction().apply(typedProps3).orElse("");
+    assertEquals("org.apache.hudi.hive.HiveStylePartitionValueExtractor", extractorClass3,
+        "Should infer HiveStylePartitionValueExtractor for single partition field with hive style enabled");
+
+    // Test 5: Multiple partition fields - should return MultiPartKeysValueExtractor
+    Properties props4 = new Properties();
+    props4.setProperty(HoodieTableConfig.PARTITION_FIELDS.key(), "year,month,day");
+    TypedProperties typedProps4 = new TypedProperties(props4);
+    String extractorClass4 = HoodieTableConfig.PARTITION_VALUE_EXTRACTOR_CLASS.getInferFunction().apply(typedProps4).orElse("");
+    assertEquals("org.apache.hudi.hive.MultiPartKeysValueExtractor", extractorClass4,
+        "Should infer MultiPartKeysValueExtractor for multiple partition fields");
+
+    // Test 6: Custom partition extractor explicitly set - should return custom class
+    Properties props5 = new Properties();
+    props5.setProperty(HoodieTableConfig.PARTITION_VALUE_EXTRACTOR_CLASS.key(), "com.example.CustomExtractor");
+    props5.setProperty(HoodieTableConfig.PARTITION_FIELDS.key(), "partition_col");
+    HoodieTableConfig.create(storage, metaPath, props5);
+    HoodieTableConfig config = new HoodieTableConfig(storage, metaPath);
+    assertEquals("com.example.CustomExtractor", config.getPartitionValueExtractorClass(),
+        "Should return custom partition value extractor class when explicitly set");
+  }
+
+  @Test
+  void testPartitionValueExtractorClassGetterMethod() throws IOException {
+    // Test getter method returns correct value
+    Properties props = new Properties();
+    props.setProperty(HoodieTableConfig.PARTITION_FIELDS.key(), "year,month");
+    HoodieTableConfig.create(storage, metaPath, props);
+
+    HoodieTableConfig config = new HoodieTableConfig(storage, metaPath);
+    String extractorClass = config.getPartitionValueExtractorClass();
+    assertEquals("org.apache.hudi.hive.MultiPartKeysValueExtractor", extractorClass,
+        "getPartitionValueExtractorClass() should return inferred value");
+
+    // Test getter returns empty string when not set and no infer
+    Properties props2 = new Properties();
+    HoodieTableConfig.create(storage, new StoragePath(basePath, "test2/.hoodie"), props2);
+    HoodieTableConfig config2 = new HoodieTableConfig(storage, new StoragePath(basePath, "test2/.hoodie"));
+    String extractorClass2 = config2.getPartitionValueExtractorClass();
+    assertNotNull(extractorClass2, "getPartitionValueExtractorClass() should not return null");
+  }
 }
+

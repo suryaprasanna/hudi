@@ -43,4 +43,21 @@ class TestDataSourceOptions {
       HoodieTableConfig.DROP_PARTITION_COLUMNS.defaultValue(),
       DataSourceWriteOptions.DROP_PARTITION_COLUMNS.defaultValue())
   }
+
+  @Test
+  def testPartitionValueExtractorOnReadConfig(): Unit = {
+    // Test that the config is marked as advanced
+    assertTrue(DataSourceReadOptions.USE_PARTITION_VALUE_EXTRACTOR_ON_READ.isAdvanced,
+      "USE_PARTITION_VALUE_EXTRACTOR_ON_READ should be marked as advanced")
+
+    // Test that the default value is false (disabled by default)
+    assertEquals("false", DataSourceReadOptions.USE_PARTITION_VALUE_EXTRACTOR_ON_READ.defaultValue(),
+      "USE_PARTITION_VALUE_EXTRACTOR_ON_READ should default to false")
+
+    // Test that the config key is correct
+    assertEquals("hoodie.datasource.read.partition.value.using.partion-value-extractor-class",
+      DataSourceReadOptions.USE_PARTITION_VALUE_EXTRACTOR_ON_READ.key(),
+      "Config key should match expected value")
+  }
 }
+
